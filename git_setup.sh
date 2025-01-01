@@ -34,6 +34,8 @@ fi
 if [ ! -d .git ]; then
     echo "Initializing git repository..."
     git init
+    # Set default branch to main
+    git config --global init.defaultBranch main
 fi
 
 # Configure git if needed
@@ -75,6 +77,9 @@ fi
 if ! git remote | grep -q '^origin$'; then
     echo "Adding remote origin..."
     git remote add origin "git@github.com:$GITHUB_USERNAME/multiagent.git"
+else
+    # Update remote URL if it exists
+    git remote set-url origin "git@github.com:$GITHUB_USERNAME/multiagent.git"
 fi
 
 # Stage changes
@@ -95,6 +100,9 @@ commit_message="Initial commit: Voice-activated AI Assistant
 - Code generation capabilities"
 
 git commit -m "$commit_message"
+
+# Ensure we're on main branch
+git branch -M main
 
 # Push changes
 echo "Pushing to GitHub..."
