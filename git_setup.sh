@@ -22,13 +22,22 @@ if [ ! -f "$SSH_KEY" ]; then
     read -r
 fi
 
-# Test SSH connection to GitHub
+# Test SSH connection to GitHub and extract username
 echo "Testing GitHub SSH connection..."
-if ! ssh -T git@github.com 2>&1 | grep -q "success"; then
+SSH_TEST=$(ssh -T git@github.com 2>&1)
+if ! echo "$SSH_TEST" | grep -q "success"; then
     echo "Error: SSH authentication to GitHub failed"
     echo "Please make sure you've added your SSH key to GitHub"
     exit 1
 fi
+
+# Extract GitHub username from SSH test output
+GITHUB_USERNAME=$(echo "$SSH_TEST" | grep -o 'Hi [^!]*' | cut -d' ' -f2)
+if [ -z "$GITHUB_USERNAME" ]; then
+    echo "Error: Could not detect GitHub username"
+    exit 1
+fi
+echo "Detected GitHub username: $GITHUB_USERNAME"
 
 # Initialize git if not already initialized
 if [ ! -d .git ]; then
@@ -51,15 +60,8 @@ if [ -z "$(git config --global user.name)" ]; then
     git config --global user.name "$git_username"
 fi
 
-# Get GitHub username
-GITHUB_USERNAME=$(git config --global user.name)
-if [ -z "$GITHUB_USERNAME" ]; then
-    echo "Please enter your GitHub username:"
-    read GITHUB_USERNAME
-fi
-
 # Create repository using GitHub CLI if installed, otherwise provide manual instructions
-if command -v gh &> /dev/null; then
+if command -v gh &> /dev/null && gh auth status >/dev/null 2>&1; then
     echo "Creating repository using GitHub CLI..."
     gh repo create multiagent --public --description "A voice-activated AI assistant with multi-model capabilities" || true
 else
@@ -73,13 +75,17 @@ else
     read -r
 fi
 
-# Add remote if not already added
-if ! git remote | grep -q '^origin$'; then
-    echo "Adding remote origin..."
-    git remote add origin "git@github.com:$GITHUB_USERNAME/multiagent.git"
-else
-    # Update remote URL if it exists
-    git remote set-url origin "git@github.com:$GITHUB_USERNAME/multiagent.git"
+# Clean up any existing remote
+git remote remove origin 2>/dev/null || true
+
+# Add remote
+echo "Adding remote origin..."
+git remote add origin "git@github.com:$GITHUB_USERNAME/multiagent.git"
+
+# Verify remote
+if ! git remote -v | grep -q "^origin.*github.com"; then
+    echo "Error: Failed to add remote repository"
+    exit 1
 fi
 
 # Stage changes
@@ -99,13 +105,20 @@ commit_message="Initial commit: Voice-activated AI Assistant
 - Progress tracking
 - Code generation capabilities"
 
-git commit -m "$commit_message"
+git commit -m "$commit_message" || true
 
 # Ensure we're on main branch
 git branch -M main
 
 # Push changes
 echo "Pushing to GitHub..."
-git push -u origin main
-
-echo "Setup complete! Repository is available at: https://github.com/$GITHUB_USERNAME/multiagent" 
+if git push -u origin main; then
+    echo -e "\nSetup complete! Repository is available at: https://github.com/$GITHUB_USERNAME/multiagent"
+    echo "You can view your repository at: https://github.com/$GITHUB_USERNAME/multiagent"
+else
+    echo -e "\nError: Failed to push to repository. Please check:"
+    echo "1. The repository exists at: https://github.com/$GITHUB_USERNAME/multiagent"
+    echo "2. You have write access to the repository"
+    echo "3. Try visiting: https://github.com/$GITHUB_USERNAME/multiagent"
+    exit 1
+fi 
